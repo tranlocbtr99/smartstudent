@@ -10,6 +10,8 @@ npm run server
 
 Base URL: `http://localhost:4000/api`
 
+Để dùng AI tạo đề, đặt biến môi trường `GEMINI_API_KEY` trên Render hoặc terminal backend local. Không đặt key này ở Vercel/frontend.
+
 ## Endpoint chính
 
 - `GET /health`
@@ -21,3 +23,8 @@ Base URL: `http://localhost:4000/api`
 - `PATCH /attendance/:recordId`
 - `GET, POST /classes/:classId/assignments`
 - `GET /notifications`
+- `POST /ai/generate-exam-from-file` (multipart Word/PDF)
+- `POST /exams`
+- `GET /exams/:examId`
+- `POST /exams/:examId/attempts`
+- `POST /ai/generate-exam`

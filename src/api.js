@@ -22,4 +22,10 @@ export const api = {
   getAssignments: (classId) => request(`/classes/${classId}/assignments`),
   createAssignment: (classId, body) => request(`/classes/${classId}/assignments`, { method: 'POST', body: JSON.stringify(body) }),
   getNotifications: () => request('/notifications'),
+  generateExam: (body) => request('/ai/generate-exam', { method: 'POST', body: JSON.stringify(body) }),
+  generateExamFromFile: (formData) => request('/ai/generate-exam-from-file', { method: 'POST', headers: {}, body: formData }),
+  saveExam: (body) => request('/exams', { method: 'POST', body: JSON.stringify(body) }),
+  getExam: (examId) => request(`/exams/${examId}`),
+  getExams: () => request('/exams'),
+  submitAttempt: (examId, body) => request(`/exams/${examId}/attempts`, { method: 'POST', body: JSON.stringify(body) }),
 }

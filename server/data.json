@@ -122,5 +122,7 @@
       "total": 32
     }
   ],
-  "notifications": []
+  "notifications": [],
+  "exams": [],
+  "attempts": []
 }

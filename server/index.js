@@ -1,5 +1,8 @@
 import cors from 'cors'
 import express from 'express'
+import multer from 'multer'
+import mammoth from 'mammoth'
+import { PDFParse } from 'pdf-parse'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -22,6 +25,7 @@ app.use(cors({
   },
 }))
 app.use(express.json())
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 function readData() {
   return JSON.parse(readFileSync(dataPath, 'utf8'))
@@ -48,6 +52,117 @@ function requireClass(req, res) {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'exam-ai-api', timestamp: new Date().toISOString() })
 })
+
+app.post('/api/ai/generate-exam', async (req, res) => {
+  const { topic, questionCount = 10, difficulty = 'medium', language = 'Vietnamese', instructions = '' } = req.body
+  const apiKey = process.env.GEMINI_API_KEY
+  const count = Number(questionCount)
+  if (!apiKey) return res.status(503).json({ error: 'Backend chưa được cấu hình GEMINI_API_KEY.' })
+  if (!topic?.trim()) return res.status(400).json({ error: 'Chủ đề tạo đề là bắt buộc.' })
+  if (!Number.isInteger(count) || count < 1 || count > 50) return res.status(400).json({ error: 'Số câu phải từ 1 đến 50.' })
+
+  const prompt = `Bạn là trợ lý tạo đề thi cho giáo viên. Hãy tạo ${count} câu hỏi trắc nghiệm về chủ đề "${topic.trim()}".
+Độ khó: ${difficulty}. Ngôn ngữ: ${language}. Yêu cầu thêm: ${instructions || 'Không có'}.
+Chỉ trả về JSON hợp lệ, không markdown, theo schema:
+{"title":"string","subject":"string","questions":[{"question":"string","options":["string","string","string","string"],"correctAnswer":0,"explanation":"string"}]}
+correctAnswer là index từ 0 đến 3. Mỗi câu phải có đúng 4 lựa chọn và chỉ một đáp án đúng.`
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }),
+    })
+    const payload = await response.json()
+    if (!response.ok) return res.status(502).json({ error: payload.error?.message || 'Gemini không thể tạo đề.' })
+    const text = payload.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text) return res.status(502).json({ error: 'Gemini trả về dữ liệu rỗng.' })
+    const exam = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim())
+    if (!exam.title || !Array.isArray(exam.questions)) return res.status(502).json({ error: 'Định dạng đề thi từ AI không hợp lệ.' })
+    res.json({ data: exam })
+  } catch (error) {
+    console.error('AI generation error:', error)
+    res.status(502).json({ error: 'Không thể kết nối dịch vụ AI.' })
+  }
+})
+
+app.post('/api/ai/generate-exam-from-file', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Vui lòng tải lên file Word hoặc PDF.' })
+  let sourceText = ''
+  try {
+    if (req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf')) {
+      const parser = new PDFParse({ data: req.file.buffer })
+      const result = await parser.getText()
+      sourceText = result.text
+      await parser.destroy()
+    } else if (req.file.mimetype.includes('word') || req.file.originalname.toLowerCase().endsWith('.docx')) {
+      sourceText = (await mammoth.extractRawText({ buffer: req.file.buffer })).value
+    } else return res.status(415).json({ error: 'Chỉ hỗ trợ file .docx hoặc .pdf.' })
+  } catch (error) {
+    console.error('Document parsing error:', error)
+    return res.status(422).json({ error: 'Không thể đọc nội dung file. Hãy thử file Word hoặc PDF khác.' })
+  }
+  if (!sourceText.trim()) return res.status(422).json({ error: 'File không có nội dung văn bản có thể đọc.' })
+  const { questionCount = 10, difficulty = 'medium', instructions = '' } = req.body
+  req.body = { topic: sourceText.slice(0, 30000), questionCount, difficulty, language: 'Vietnamese', instructions: `Dựa hoàn toàn trên tài liệu sau và không bịa ngoài tài liệu. ${instructions}` }
+  return generateExamFromGemini(req, res)
+})
+
+app.post('/api/exams', (req, res) => {
+  const { title, subject = '', questions, classId = null, durationMinutes = 30 } = req.body
+  if (!title || !Array.isArray(questions) || !questions.length) return res.status(400).json({ error: 'Đề thi cần có tiêu đề và ít nhất một câu hỏi.' })
+  const data = readData()
+  data.exams ||= []
+  const exam = { id: `exam-${randomUUID()}`, title: title.trim(), subject, questions, classId, durationMinutes: Number(durationMinutes), status: 'draft', createdAt: new Date().toISOString() }
+  data.exams.push(exam)
+  writeData(data)
+  res.status(201).json({ data: exam })
+})
+
+app.get('/api/exams', (_req, res) => {
+  const data = readData()
+  res.json({ data: (data.exams || []).map(({ questions, ...exam }) => ({ ...exam, questionCount: questions.length })) })
+})
+
+app.get('/api/exams/:examId', (req, res) => {
+  const data = readData()
+  const exam = (data.exams || []).find((item) => item.id === req.params.examId)
+  if (!exam) return res.status(404).json({ error: 'Không tìm thấy đề thi.' })
+  res.json({ data: { ...exam, questions: exam.questions.map(({ correctAnswer, explanation, ...question }) => question) } })
+})
+
+app.post('/api/exams/:examId/attempts', (req, res) => {
+  const data = readData()
+  const exam = (data.exams || []).find((item) => item.id === req.params.examId)
+  if (!exam) return res.status(404).json({ error: 'Không tìm thấy đề thi.' })
+  const { studentId, answers = [] } = req.body
+  if (!studentId) return res.status(400).json({ error: 'studentId là bắt buộc.' })
+  const score = exam.questions.reduce((total, question, index) => total + (answers[index] === question.correctAnswer ? 1 : 0), 0)
+  data.attempts ||= []
+  const attempt = { id: `attempt-${randomUUID()}`, examId: exam.id, studentId, answers, correctCount: score, totalQuestions: exam.questions.length, score: Math.round((score / exam.questions.length) * 10 * 100) / 100, submittedAt: new Date().toISOString() }
+  data.attempts.push(attempt)
+  writeData(data)
+  res.status(201).json({ data: { ...attempt, questions: exam.questions.map(({ correctAnswer, explanation, ...question }) => question) } })
+})
+
+async function generateExamFromGemini(req, res) {
+  const { topic, questionCount = 10, difficulty = 'medium', language = 'Vietnamese', instructions = '' } = req.body
+  const apiKey = process.env.GEMINI_API_KEY
+  const count = Number(questionCount)
+  if (!apiKey) return res.status(503).json({ error: 'Backend chưa được cấu hình GEMINI_API_KEY.' })
+  const prompt = `Bạn là trợ lý tạo đề thi. Dựa trên nội dung tài liệu dưới đây, tạo ${count} câu hỏi trắc nghiệm. Độ khó: ${difficulty}. Ngôn ngữ: ${language}. ${instructions}
+Chỉ trả về JSON hợp lệ theo schema: {"title":"string","subject":"string","questions":[{"question":"string","options":["string","string","string","string"],"correctAnswer":0,"explanation":"string"}]}. correctAnswer là index 0-3. Mỗi câu đúng 4 lựa chọn và chỉ một đáp án đúng.
+NỘI DUNG TÀI LIỆU:
+${topic}`
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } }) })
+    const payload = await response.json()
+    if (!response.ok) return res.status(502).json({ error: payload.error?.message || 'Gemini không thể tạo đề.' })
+    const text = payload.candidates?.[0]?.content?.parts?.[0]?.text
+    const exam = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim())
+    if (!exam.title || !Array.isArray(exam.questions)) return res.status(502).json({ error: 'Định dạng đề thi từ AI không hợp lệ.' })
+    res.json({ data: exam })
+  } catch (error) { console.error('AI generation error:', error); res.status(502).json({ error: 'Không thể tạo đề từ nội dung tài liệu.' }) }
+}
 
 app.get('/api/classes', (_req, res) => {
   const data = readData()

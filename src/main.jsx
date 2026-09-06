@@ -73,13 +73,13 @@ function App() {
         <nav className="main-nav" aria-label="Điều hướng chính">
           <NavItem icon={<LayoutDashboard size={18} />} label="Tổng quan" onClick={() => setActiveTab('overview')} active={activeTab === 'overview'} />
           <NavItem icon={<Users size={18} />} label="Lớp học" onClick={() => setActiveTab('overview')} active={activeTab === 'overview'} />
-          <NavItem icon={<BookOpen size={18} />} label="Đề thi" onClick={() => setActiveTab('assignments')} active={activeTab === 'assignments'} />
+          <NavItem icon={<BookOpen size={18} />} label="Đề thi" onClick={() => setActiveTab('exams')} active={activeTab === 'exams'} />
           <NavItem icon={<ClipboardCheck size={18} />} label="Bài tập" onClick={() => setActiveTab('assignments')} active={activeTab === 'assignments'} />
           <NavItem icon={<CalendarDays size={18} />} label="Điểm danh" onClick={() => setActiveTab('attendance')} active={activeTab === 'attendance'} />
           <NavItem icon={<GraduationCap size={18} />} label="Học sinh" onClick={() => setActiveTab('students')} active={activeTab === 'students'} />
           <NavItem icon={<Zap size={18} />} label="Kết quả" onClick={() => setActiveTab('overview')} active={false} />
           <NavItem icon={<Bell size={18} />} label="Thông báo" onClick={() => setShowNotice(true)} active={showNotice} />
-          <NavItem icon={<Zap size={18} />} label="AI tạo đề" />
+          <NavItem icon={<Zap size={18} />} label="AI tạo đề" onClick={() => setActiveTab('ai')} active={activeTab === 'ai'} />
         </nav>
         <div className="sidebar-bottom">
           <NavItem icon={<Settings size={18} />} label="Cài đặt" />
@@ -113,6 +113,8 @@ function App() {
           {activeTab === 'students' && <Students classId={selectedClass.id} />}
           {activeTab === 'attendance' && <Attendance classId={selectedClass.id} />}
           {activeTab === 'assignments' && <Assignments classId={selectedClass.id} />}
+          {activeTab === 'exams' && <ExamRunner />}
+          {activeTab === 'ai' && <AIGeneratorV2 />}
         </div>
       </main>
 
@@ -233,6 +235,55 @@ function Assignments({ classId }) {
   async function addAssignment(event) { event.preventDefault(); const form = new FormData(event.currentTarget); try { const item = await api.createAssignment(classId, { title: form.get('title'), type: 'exam', dueAt: new Date(`${form.get('due')}T23:59:00`).toISOString() }); setItems((current) => [...current, { ...item, type: 'Bài kiểm tra', due: `Hạn nộp ${new Date(item.dueAt).toLocaleDateString('vi-VN')}`, progress: 'Chưa nộp', tone: 'orange' }]); event.currentTarget.reset(); setShowForm(false) } catch (requestError) { setError(requestError.message) } }
   return <section className="panel full-panel"><div className="panel-head"><div><span className="section-kicker">BÀI TẬP VÀ KIỂM TRA</span><h3>{items.length} hoạt động</h3></div><button className="primary-button" onClick={() => setShowForm(!showForm)}><Plus size={17} /> Giao bài tập</button></div>{error && <p className="interaction-hint">{error}</p>}{showForm && <form className="inline-form" onSubmit={addAssignment}><input name="title" placeholder="Tên bài tập" required /><input name="due" type="date" required /><button className="primary-button" type="submit">Giao bài</button></form>}<div className="assignment-list">{items.map((item) => <Assignment key={item.id} {...item} />)}</div></section>
 }
+function AIGenerator() {
+  const [exam, setExam] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function generate(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setExam(null)
+    const form = new FormData(event.currentTarget)
+    try { setExam(await api.generateExam({ topic: form.get('topic'), questionCount: Number(form.get('questionCount')), difficulty: form.get('difficulty'), instructions: form.get('instructions') })) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+  return <section className="ai-layout"><section className="panel ai-form-panel"><div className="panel-head"><div><span className="section-kicker">EXAMAI AI</span><h3>Tạo đề kiểm tra</h3></div><span className="ai-badge"><Zap size={13} /> Gemini</span></div><p className="muted ai-description">Nhập chủ đề để AI tạo bản nháp. Giáo viên luôn kiểm duyệt trước khi giao cho lớp.</p><form className="ai-form" onSubmit={generate}><label>Chủ đề<input name="topic" placeholder="Ví dụ: Kinh tế vi mô - cung cầu" required /></label><div className="form-row"><label>Số câu<select name="questionCount" defaultValue="10"><option value="5">5 câu</option><option value="10">10 câu</option><option value="20">20 câu</option></select></label><label>Độ khó<select name="difficulty" defaultValue="medium"><option value="easy">Cơ bản</option><option value="medium">Trung bình</option><option value="hard">Nâng cao</option></select></label></div><label>Yêu cầu thêm<textarea name="instructions" rows="4" placeholder="Ví dụ: Tập trung vào ví dụ thực tế, phù hợp sinh viên năm nhất..." /></label>{error && <p className="api-alert">{error}</p>}<button className="primary-button ai-submit" disabled={busy}>{busy ? 'AI đang tạo đề...' : <><Zap size={17} /> Tạo đề bằng AI</>}</button></form></section><section className="panel exam-preview">{exam ? <><div className="panel-head"><div><span className="section-kicker">BẢN NHÁP CẦN KIỂM DUYỆT</span><h3>{exam.title}</h3></div><span className="question-count">{exam.questions.length} câu</span></div><div className="question-list">{exam.questions.map((question, index) => <article className="question-card" key={`${question.question}-${index}`}><strong>Câu {index + 1}. {question.question}</strong><ol type="A">{question.options.map((option) => <li key={option}>{option}</li>)}</ol><small>Đáp án AI chọn: {String.fromCharCode(65 + question.correctAnswer)} · {question.explanation}</small></article>)}</div></> : <div className="empty-preview"><Zap size={26} /><strong>Bản xem trước đề thi</strong><p>Đề thi AI sẽ xuất hiện ở đây để bạn kiểm tra trước khi xuất bản.</p></div>}</section></section>
+}
 function Assignment({ title, type, due, progress, tone }) { return <div className="assignment-row"><div className={`assignment-icon ${tone}`}><BookOpen size={19} /></div><div><strong>{title}</strong><small>{type} <span>·</span> {due}</small></div><span className={`assignment-progress ${tone}`}>{progress}</span><button className="row-arrow">→</button></div> }
+
+function ExamRunner() {
+  const [exams, setExams] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [answers, setAnswers] = useState([])
+  const [studentId, setStudentId] = useState('')
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => { api.getExams().then(setExams).catch((requestError) => setError(requestError.message)) }, [])
+  async function openExam(examId) { try { setSelected(await api.getExam(examId)); setAnswers([]); setResult(null) } catch (requestError) { setError(requestError.message) } }
+  async function submitExam() { try { setResult(await api.submitAttempt(selected.id, { studentId: studentId.trim().toUpperCase(), answers })) } catch (requestError) { setError(requestError.message) } }
+  if (result) return <section className="panel exam-result"><span className="section-kicker">KẾT QUẢ BÀI LÀM</span><strong>{result.score}/10</strong><p>Đúng {result.correctCount}/{result.totalQuestions} câu hỏi.</p><button className="secondary-button" onClick={() => setResult(null)}>Xem lại bài</button></section>
+  if (selected) return <section className="panel full-panel"><div className="panel-head"><div><span className="section-kicker">BÀI KIỂM TRA</span><h3>{selected.title}</h3></div><button className="secondary-button" onClick={() => setSelected(null)}>← Danh sách đề</button></div><label className="student-id-field">Mã học sinh<input value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="Ví dụ: HS00128" /></label><div className="student-exam-list">{selected.questions.map((question, index) => <article className="student-question" key={`${question.question}-${index}`}><strong>Câu {index + 1}. {question.question}</strong>{question.options.map((option, optionIndex) => <label key={option}><input type="radio" name={`question-${index}`} checked={answers[index] === optionIndex} onChange={() => setAnswers((current) => { const next = [...current]; next[index] = optionIndex; return next })} /> {option}</label>)}</article>)}</div><button className="primary-button submit-exam" onClick={submitExam} disabled={!studentId.trim() || answers.length !== selected.questions.length}>Nộp bài</button></section>
+  return <section className="panel full-panel"><div className="panel-head"><div><span className="section-kicker">DÀNH CHO HỌC SINH</span><h3>Bài kiểm tra trực tuyến</h3></div></div>{error && <p className="interaction-hint">{error}</p>}{exams.length ? <div className="exam-list">{exams.map((exam) => <button className="exam-list-item" key={exam.id} onClick={() => openExam(exam.id)}><div className="assignment-icon orange"><ClipboardCheck size={18} /></div><span><strong>{exam.title}</strong><small>{exam.questionCount} câu · {exam.durationMinutes} phút</small></span><span className="row-arrow">→</span></button>)}</div> : <div className="empty-preview"><ClipboardCheck size={26} /><strong>Chưa có bài kiểm tra</strong><p>Đề thi giáo viên lưu sẽ xuất hiện ở đây.</p></div>}</section>
+}
+
+function AIGeneratorV2() {
+  const [mode, setMode] = useState('file')
+  const [exam, setExam] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [savedId, setSavedId] = useState('')
+  async function generate(event) {
+    event.preventDefault(); setBusy(true); setError(''); setExam(null); setSavedId('')
+    const form = new FormData(event.currentTarget)
+    try {
+      const result = mode === 'file' ? await api.generateExamFromFile(form) : await api.generateExam({ topic: form.get('topic'), questionCount: Number(form.get('questionCount')), difficulty: form.get('difficulty'), instructions: form.get('instructions') })
+      setExam(result)
+    } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+  async function saveExam() {
+    try { const saved = await api.saveExam({ title: exam.title, subject: exam.subject, questions: exam.questions }); setSavedId(saved.id) } catch (requestError) { setError(requestError.message) }
+  }
+  return <section className="ai-layout"><section className="panel ai-form-panel"><div className="panel-head"><div><span className="section-kicker">EXAMAI AI</span><h3>Tạo đề từ tài liệu</h3></div><span className="ai-badge"><Zap size={13} /> Gemini</span></div><div className="mode-switch"><button className={mode === 'file' ? 'active' : ''} onClick={() => setMode('file')}>Tải Word/PDF</button><button className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')}>Nhập thủ công</button></div><p className="muted ai-description">AI đọc tài liệu của giáo viên, tạo câu hỏi và đưa ra bản nháp để kiểm duyệt.</p><form className="ai-form" onSubmit={generate}>{mode === 'file' ? <label>Tài liệu nguồn<input name="file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label> : <label>Nội dung đề hoặc giáo trình<textarea name="topic" rows="8" placeholder="Dán nội dung bài giảng, câu hỏi hoặc đề cũ..." required /></label>}<div className="form-row"><label>Số câu<select name="questionCount" defaultValue="10"><option value="5">5 câu</option><option value="10">10 câu</option><option value="20">20 câu</option></select></label><label>Độ khó<select name="difficulty" defaultValue="medium"><option value="easy">Cơ bản</option><option value="medium">Trung bình</option><option value="hard">Nâng cao</option></select></label></div><label>Yêu cầu thêm<textarea name="instructions" rows="3" placeholder="Ví dụ: bám sát nội dung, phù hợp sinh viên năm nhất..." /></label>{error && <p className="api-alert">{error}</p>}<button className="primary-button ai-submit" disabled={busy}>{busy ? 'Đang phân tích tài liệu...' : <><Zap size={17} /> Tạo bản nháp</>}</button></form></section><section className="panel exam-preview">{exam ? <><div className="panel-head"><div><span className="section-kicker">BẢN NHÁP CẦN KIỂM DUYỆT</span><h3>{exam.title}</h3></div><div className="preview-actions"><span className="question-count">{exam.questions.length} câu</span><button className="primary-button" onClick={saveExam} disabled={Boolean(savedId)}>{savedId ? 'Đã lưu đề' : 'Lưu đề thi'}</button></div></div><div className="question-list">{exam.questions.map((question, index) => <article className="question-card" key={`${question.question}-${index}`}><strong>Câu {index + 1}. {question.question}</strong><ol type="A">{question.options.map((option) => <li key={option}>{option}</li>)}</ol><small>Đáp án AI chọn: {String.fromCharCode(65 + question.correctAnswer)} · {question.explanation}</small></article>)}</div></> : <div className="empty-preview"><Zap size={26} /><strong>Bản xem trước đề thi</strong><p>Chọn file Word/PDF hoặc nhập nội dung thủ công để bắt đầu.</p></div>}</section></section>
+}
 
 createRoot(document.getElementById('root')).render(<StrictMode><App /></StrictMode>)
