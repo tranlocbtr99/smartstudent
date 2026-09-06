@@ -2,9 +2,10 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Bell, BookOpen, CalendarDays, Check, ChevronDown, ClipboardCheck,
-  Clock3, GraduationCap, LayoutDashboard, Menu, Plus, Search, Settings,
+  Clock3, GraduationCap, LayoutDashboard, Menu, Plus, QrCode, Search, Settings,
   Users, X, Zap,
 } from 'lucide-react'
+import QRCode from 'qrcode'
 import './styles.css'
 import { api } from './api'
 
@@ -180,6 +181,7 @@ function Students({ classId }) {
 function Attendance({ classId }) {
   const [records, setRecords] = useState([])
   const [session, setSession] = useState(null)
+  const [qrData, setQrData] = useState('')
   const [error, setError] = useState('')
   const order = ['present', 'late', 'absent', 'excused']
   async function loadAttendance() {
@@ -198,14 +200,19 @@ function Attendance({ classId }) {
   }
   useEffect(() => { loadAttendance() }, [classId])
   async function createSession() {
-    try { await api.createAttendanceSession(classId, { expiresInMinutes: 2 }); await loadAttendance() } catch (requestError) { setError(requestError.message) }
+    try {
+      const createdSession = await api.createAttendanceSession(classId, { expiresInMinutes: 2 })
+      const payload = JSON.stringify({ type: 'attendance', sessionId: createdSession.id, code: createdSession.code, expiresAt: createdSession.expiresAt })
+      setQrData(await QRCode.toDataURL(payload, { width: 220, margin: 2, errorCorrectionLevel: 'M' }))
+      await loadAttendance()
+    } catch (requestError) { setError(requestError.message) }
   }
   async function cycleStatus(record) {
     const nextStatus = order[(order.indexOf(record.status) + 1) % order.length]
     if (!record.recordId) return
     try { await api.updateAttendance(record.recordId, nextStatus); setRecords((current) => current.map((item) => item.id === record.id ? { ...item, status: nextStatus } : item)) } catch (requestError) { setError(requestError.message) }
   }
-  return <section className="panel full-panel"><div className="panel-head"><div><span className="section-kicker">ĐIỂM DANH</span><h3>Buổi 05 <span>· Chủ nhật, 06/09/2026</span></h3></div><button className="primary-button" onClick={createSession}><ClipboardCheck size={17} /> Tạo mã điểm danh</button></div>{error && <p className="interaction-hint">{error}</p>}<div className="attendance-toolbar"><span><Clock3 size={16} /> {session ? <>Mã phiên <strong>{session.code}</strong></> : 'Chưa có phiên điểm danh'}</span><button className="secondary-button">Xuất lịch sử</button></div><p className="interaction-hint">{session ? 'Bấm vào trạng thái để cập nhật và lưu điểm danh.' : 'Tạo mã điểm danh để mở phiên cho học sinh.'}</p><div className="student-table">{records.map((student, index) => <div className="table-row" key={student.id}><div className="student-cell"><div className="avatar avatar-table">{student.initials}</div><div><strong>{student.name}</strong><small>{student.id}</small></div></div><button className={`status-select ${student.status}`} onClick={() => cycleStatus(student)}>{statusLabels[student.status]} <ChevronDown size={14} /></button><span className="attendance-time">18:0{index + 1}</span><button className="row-arrow">→</button></div>)}</div></section>
+  return <section className="panel full-panel"><div className="panel-head"><div><span className="section-kicker">ĐIỂM DANH</span><h3>Buổi 05 <span>· Chủ nhật, 06/09/2026</span></h3></div><button className="primary-button" onClick={createSession}><QrCode size={17} /> Tạo mã điểm danh</button></div>{error && <p className="interaction-hint">{error}</p>}{qrData && session && <div className="qr-panel"><img src={qrData} alt={`QR điểm danh ${session.code}`} /><div><span className="section-kicker">ĐIỂM DANH BẰNG QR</span><strong>Mã {session.code}</strong><small>Hết hạn lúc {new Date(session.expiresAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</small><button className="secondary-button" onClick={() => setQrData('')}>Ẩn QR</button></div></div>}<div className="attendance-toolbar"><span><Clock3 size={16} /> {session ? <>Mã phiên <strong>{session.code}</strong></> : 'Chưa có phiên điểm danh'}</span><button className="secondary-button">Xuất lịch sử</button></div><p className="interaction-hint">{session ? 'Bấm vào trạng thái để cập nhật và lưu điểm danh.' : 'Tạo mã điểm danh để mở phiên cho học sinh.'}</p><div className="student-table">{records.map((student, index) => <div className="table-row" key={student.id}><div className="student-cell"><div className="avatar avatar-table">{student.initials}</div><div><strong>{student.name}</strong><small>{student.id}</small></div></div><button className={`status-select ${student.status}`} onClick={() => cycleStatus(student)}>{statusLabels[student.status]} <ChevronDown size={14} /></button><span className="attendance-time">18:0{index + 1}</span><button className="row-arrow">→</button></div>)}</div></section>
 }
 function Assignments({ classId }) {
   const [items, setItems] = useState([])

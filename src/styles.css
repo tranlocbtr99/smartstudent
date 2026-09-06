@@ -30,3 +30,7 @@ button { cursor: pointer; border: 0; color: inherit; }
 @keyframes loading-sweep { 0% { opacity: .45; transform: scaleX(.65); transform-origin: left; } 50% { opacity: 1; transform: scaleX(1); } 100% { opacity: .45; transform: scaleX(.65); transform-origin: right; } }
 .boot-state { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 16px; padding: 24px; color: #52688f; background: #f5f8fe; font-size: 14px; text-align: center; }
 .boot-state.error-state { color: #9b6b2d; }
+.qr-panel { display: flex; align-items: center; gap: 18px; margin-top: 19px; padding: 15px; border: 1px solid #dce8fb; background: #f7faff; border-radius: 7px; }
+.qr-panel img { width: 150px; height: 150px; padding: 6px; background: #fff; border: 1px solid #e2eaf7; border-radius: 5px; }
+.qr-panel > div { display: grid; align-content: center; gap: 7px; }.qr-panel strong { font: 800 20px Manrope, sans-serif; color: #2463d8; }.qr-panel small { color: var(--muted); font-size: 11px; }.qr-panel .secondary-button { width: fit-content; margin-top: 7px; }
+@media (max-width: 680px) { .qr-panel { align-items: center; flex-direction: column; text-align: center; }.qr-panel .secondary-button { margin: 7px auto 0; } }
