@@ -1,4 +1,30 @@
 {
+  "users": [
+    {
+      "id": "admin-001",
+      "email": "admin@examai.vn",
+      "name": "Quản trị viên",
+      "role": "admin",
+      "passwordHash": "$2b$10$D0Fy7DO/SiXbe1B.lRcqjeGt5rdA3TlIcrcif2gM48d58AOMcCRSW",
+      "createdAt": "2026-09-01T09:00:00.000Z"
+    },
+    {
+      "id": "teacher-nguyen-van-a",
+      "email": "teacher@examai.vn",
+      "name": "Nguyễn Văn A",
+      "role": "teacher",
+      "passwordHash": "$2b$10$hToF4IM6ziOp62LKHcSqeOSVMIOSHOVzIqbzl84llmrw6JlXKCCtS",
+      "createdAt": "2026-09-01T09:00:00.000Z"
+    },
+    {
+      "id": "student-001",
+      "email": "student@examai.vn",
+      "name": "Nguyễn Văn An",
+      "role": "student",
+      "passwordHash": "$2b$10$p/./2jHzxXO.EtRALFlGY.aBPXPTORf3taXvc6uJ/Us2DW2ulBSRW",
+      "createdAt": "2026-09-01T09:00:00.000Z"
+    }
+  ],
   "classes": [
     {
       "id": "class-ktvm-k60",

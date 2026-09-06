@@ -70,3 +70,5 @@ Lưu ý: `server/data.json` phù hợp cho demo và development. Production nên
 Backend hiện cung cấp API REST và lưu file JSON. Khi Render restart, file JSON có thể bị reset; production nên chuyển sang PostgreSQL, Firebase hoặc Supabase. Backend đã giới hạn CORS bằng biến `ALLOWED_ORIGINS`; nếu đổi domain Vercel, cập nhật biến này trên Render rồi redeploy.
 
 AI tạo đề hiện có hai luồng: chuyển file Word/PDF hoặc nội dung trắc nghiệm có sẵn thành bài online; hệ thống không tự thêm câu hỏi và không đoán đáp án nếu tài liệu không đánh dấu rõ.
+
+Hệ thống đã có đăng nhập JWT và ba vai trò `admin`, `teacher`, `student`. Giáo viên/admin có thể lưu và giao đề vào lớp; học sinh chỉ có thể làm bài và nộp bài. Tài khoản demo và API auth được ghi trong [server/README.md](server/README.md).

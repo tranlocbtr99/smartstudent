@@ -1,8 +1,12 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api'
 
 async function request(path, options = {}) {
+  const isFormData = options.body instanceof FormData
+  const token = localStorage.getItem('examai_token')
+  const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) }
+  if (token) headers.Authorization = `Bearer ${token}`
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
     ...options,
   })
   const payload = await response.json().catch(() => ({}))
@@ -11,6 +15,10 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  login: (body) => request('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  me: () => request('/auth/me'),
+  getAdminUsers: () => request('/admin/users'),
+  createAdminUser: (body) => request('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   getClasses: () => request('/classes'),
   createClass: (body) => request('/classes', { method: 'POST', body: JSON.stringify(body) }),
   getStudents: (classId) => request(`/classes/${classId}/students`),
@@ -23,10 +31,11 @@ export const api = {
   createAssignment: (classId, body) => request(`/classes/${classId}/assignments`, { method: 'POST', body: JSON.stringify(body) }),
   getNotifications: () => request('/notifications'),
   generateExam: (body) => request('/ai/generate-exam', { method: 'POST', body: JSON.stringify(body) }),
-  generateExamFromFile: (formData) => request('/ai/generate-exam-from-file', { method: 'POST', headers: {}, body: formData }),
+  generateExamFromFile: (formData) => request('/ai/generate-exam-from-file', { method: 'POST', body: formData }),
   convertExamText: (body) => request('/ai/convert-exam-text', { method: 'POST', body: JSON.stringify(body) }),
   saveExam: (body) => request('/exams', { method: 'POST', body: JSON.stringify(body) }),
   getExam: (examId) => request(`/exams/${examId}`),
   getExams: () => request('/exams'),
   submitAttempt: (examId, body) => request(`/exams/${examId}/attempts`, { method: 'POST', body: JSON.stringify(body) }),
+  publishExam: (classId, examId, body) => request(`/classes/${classId}/exams/${examId}/publish`, { method: 'POST', body: JSON.stringify(body) }),
 }

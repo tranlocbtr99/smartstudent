@@ -1,5 +1,7 @@
 import cors from 'cors'
 import express from 'express'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 import multer from 'multer'
 import mammoth from 'mammoth'
 import { PDFParse } from 'pdf-parse'
@@ -12,6 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataPath = join(__dirname, 'data.json')
 const app = express()
 const port = Number(process.env.PORT || 4000)
+const jwtSecret = process.env.JWT_SECRET || 'exam-ai-development-secret-change-me'
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .split(',')
@@ -40,6 +43,25 @@ function findClass(data, classId) {
   return data.classes.find((item) => item.id === classId || item.code === classId)
 }
 
+function issueToken(user) {
+  return jwt.sign({ sub: user.id, role: user.role, email: user.email, name: user.name }, jwtSecret, { expiresIn: '7d' })
+}
+
+function authenticate(req, res, next) {
+  const header = req.headers.authorization
+  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Vui lòng đăng nhập.' })
+  try {
+    req.user = jwt.verify(header.slice(7), jwtSecret)
+    next()
+  } catch {
+    res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn.' })
+  }
+}
+
+function allowRoles(...roles) {
+  return (req, res, next) => roles.includes(req.user.role) ? next() : res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này.' })
+}
+
 function requireClass(req, res) {
   const data = readData()
   const classItem = findClass(data, req.params.classId)
@@ -50,9 +72,54 @@ function requireClass(req, res) {
   return { data, classItem }
 }
 
+function requireClassManager(req, res) {
+  const result = requireClass(req, res)
+  if (!result) return null
+  if (req.user.role !== 'admin' && result.classItem.teacherId !== req.user.sub) {
+    res.status(403).json({ error: 'Bạn không quản lý lớp học này.' })
+    return null
+  }
+  return result
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'exam-ai-api', timestamp: new Date().toISOString() })
 })
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body
+  const data = readData()
+  const user = (data.users || []).find((item) => item.email.toLowerCase() === String(email || '').trim().toLowerCase())
+  if (!user || !(await bcrypt.compare(password || '', user.passwordHash))) return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng.' })
+  const { passwordHash, ...publicUser } = user
+  res.json({ data: { token: issueToken(user), user: publicUser } })
+})
+
+app.get('/api/auth/me', authenticate, (req, res) => {
+  const user = readData().users.find((item) => item.id === req.user.sub)
+  if (!user) return res.status(401).json({ error: 'Tài khoản không tồn tại.' })
+  const { passwordHash, ...publicUser } = user
+  res.json({ data: publicUser })
+})
+
+app.get('/api/admin/users', authenticate, allowRoles('admin'), (_req, res) => {
+  const users = readData().users.map(({ passwordHash, ...user }) => user)
+  res.json({ data: users })
+})
+
+app.post('/api/admin/users', authenticate, allowRoles('admin'), async (req, res) => {
+  const { email, name, role = 'student', password } = req.body
+  if (!email || !name || !password || !['admin', 'teacher', 'student'].includes(role)) return res.status(400).json({ error: 'email, name, password và role là bắt buộc.' })
+  const data = readData()
+  if (data.users.some((user) => user.email.toLowerCase() === email.trim().toLowerCase())) return res.status(409).json({ error: 'Email đã tồn tại.' })
+  const user = { id: `${role}-${randomUUID()}`, email: email.trim().toLowerCase(), name: name.trim(), role, passwordHash: await bcrypt.hash(password, 10), createdAt: new Date().toISOString() }
+  data.users.push(user)
+  writeData(data)
+  const { passwordHash, ...publicUser } = user
+  res.status(201).json({ data: publicUser })
+})
+
+app.use('/api', authenticate)
 
 app.post('/api/ai/generate-exam', async (req, res) => {
   const { topic, questionCount = 10, difficulty = 'medium', language = 'Vietnamese', instructions = '' } = req.body
@@ -113,7 +180,7 @@ app.post('/api/ai/convert-exam-text', async (req, res) => {
   return convertExamText(text, instructions, res)
 })
 
-app.post('/api/exams', (req, res) => {
+app.post('/api/exams', allowRoles('admin', 'teacher'), (req, res) => {
   const { title, subject = '', questions, classId = null, durationMinutes = 30 } = req.body
   if (!title || !Array.isArray(questions) || !questions.length) return res.status(400).json({ error: 'Đề thi cần có tiêu đề và ít nhất một câu hỏi.' })
   const data = readData()
@@ -124,15 +191,31 @@ app.post('/api/exams', (req, res) => {
   res.status(201).json({ data: exam })
 })
 
+app.post('/api/classes/:classId/exams/:examId/publish', allowRoles('admin', 'teacher'), (req, res) => {
+  const result = requireClassManager(req, res)
+  if (!result) return
+  const exam = (result.data.exams || []).find((item) => item.id === req.params.examId)
+  if (!exam) return res.status(404).json({ error: 'Không tìm thấy đề thi.' })
+  exam.classId = result.classItem.id
+  exam.status = 'published'
+  const { dueAt, durationMinutes = exam.durationMinutes || 30 } = req.body
+  const assignment = { id: `assignment-${randomUUID()}`, classId: result.classItem.id, examId: exam.id, title: exam.title, type: 'exam', dueAt: dueAt || new Date(Date.now() + 7 * 86400000).toISOString(), status: 'published', submitted: 0, total: result.data.students.filter((student) => student.classId === result.classItem.id).length, durationMinutes: Number(durationMinutes), createdAt: new Date().toISOString() }
+  result.data.assignments.push(assignment)
+  result.data.notifications.push({ id: `notification-${randomUUID()}`, recipientType: 'class', classId: result.classItem.id, type: 'assignment', title: 'Đề thi mới', message: `${exam.title} đã được giao vào lớp ${result.classItem.code}.`, isRead: false, createdAt: new Date().toISOString() })
+  writeData(result.data)
+  res.status(201).json({ data: assignment })
+})
+
 app.get('/api/exams', (_req, res) => {
   const data = readData()
-  res.json({ data: (data.exams || []).map(({ questions, ...exam }) => ({ ...exam, questionCount: questions.length })) })
+  res.json({ data: (data.exams || []).filter((exam) => exam.status === 'published').map(({ questions, ...exam }) => ({ ...exam, questionCount: questions.length })) })
 })
 
 app.get('/api/exams/:examId', (req, res) => {
   const data = readData()
   const exam = (data.exams || []).find((item) => item.id === req.params.examId)
   if (!exam) return res.status(404).json({ error: 'Không tìm thấy đề thi.' })
+  if (exam.status !== 'published' && !['admin', 'teacher'].includes(req.user.role)) return res.status(403).json({ error: 'Đề thi chưa được giao vào lớp.' })
   res.json({ data: { ...exam, questions: exam.questions.map(({ correctAnswer, explanation, ...question }) => question) } })
 })
 
@@ -210,14 +293,14 @@ app.get('/api/classes', (_req, res) => {
   res.json({ data: classes })
 })
 
-app.post('/api/classes', (req, res) => {
-  const { code, name, subject = '', room = '', schedule = '', teacherId = 'teacher-demo' } = req.body
+app.post('/api/classes', allowRoles('admin', 'teacher'), (req, res) => {
+  const { code, name, subject = '', room = '', schedule = '' } = req.body
   if (!code || !name) return res.status(400).json({ error: 'code và name là bắt buộc.' })
   const data = readData()
   if (data.classes.some((item) => item.code.toLowerCase() === code.trim().toLowerCase())) {
     return res.status(409).json({ error: 'Mã lớp đã tồn tại.' })
   }
-  const classItem = { id: `class-${randomUUID()}`, code: code.trim().toUpperCase(), name: name.trim(), subject, room, schedule, teacherId, createdAt: new Date().toISOString() }
+  const classItem = { id: `class-${randomUUID()}`, code: code.trim().toUpperCase(), name: name.trim(), subject, room, schedule, teacherId: req.user.role === 'admin' ? (req.body.teacherId || req.user.sub) : req.user.sub, createdAt: new Date().toISOString() }
   data.classes.push(classItem)
   writeData(data)
   res.status(201).json({ data: classItem })
@@ -236,8 +319,8 @@ app.get('/api/classes/:classId/students', (req, res) => {
   res.json({ data: result.data.students.filter((student) => student.classId === result.classItem.id) })
 })
 
-app.post('/api/classes/:classId/students', (req, res) => {
-  const result = requireClass(req, res)
+app.post('/api/classes/:classId/students', allowRoles('admin', 'teacher'), (req, res) => {
+  const result = requireClassManager(req, res)
   if (!result) return
   const { name, email = '' } = req.body
   if (!name) return res.status(400).json({ error: 'name là bắt buộc.' })
@@ -257,8 +340,8 @@ app.get('/api/classes/:classId/attendance', (req, res) => {
   res.json({ data: { sessions, records } })
 })
 
-app.post('/api/classes/:classId/attendance/sessions', (req, res) => {
-  const result = requireClass(req, res)
+app.post('/api/classes/:classId/attendance/sessions', allowRoles('admin', 'teacher'), (req, res) => {
+  const result = requireClassManager(req, res)
   if (!result) return
   const expiresInMinutes = Math.max(1, Number(req.body.expiresInMinutes || 2))
   const now = new Date()
@@ -269,7 +352,7 @@ app.post('/api/classes/:classId/attendance/sessions', (req, res) => {
   res.status(201).json({ data: session })
 })
 
-app.patch('/api/attendance/:recordId', (req, res) => {
+app.patch('/api/attendance/:recordId', allowRoles('admin', 'teacher'), (req, res) => {
   const data = readData()
   const record = data.attendanceRecords.find((item) => item.id === req.params.recordId)
   if (!record) return res.status(404).json({ error: 'Không tìm thấy bản ghi điểm danh.' })
@@ -286,8 +369,8 @@ app.get('/api/classes/:classId/assignments', (req, res) => {
   res.json({ data: result.data.assignments.filter((assignment) => assignment.classId === result.classItem.id) })
 })
 
-app.post('/api/classes/:classId/assignments', (req, res) => {
-  const result = requireClass(req, res)
+app.post('/api/classes/:classId/assignments', allowRoles('admin', 'teacher'), (req, res) => {
+  const result = requireClassManager(req, res)
   if (!result) return
   const { title, type = 'exam', dueAt } = req.body
   if (!title || !dueAt) return res.status(400).json({ error: 'title và dueAt là bắt buộc.' })
