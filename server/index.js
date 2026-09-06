@@ -2,6 +2,7 @@ import cors from 'cors'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { OAuth2Client } from 'google-auth-library'
 import multer from 'multer'
 import mammoth from 'mammoth'
 import { PDFParse } from 'pdf-parse'
@@ -15,6 +16,8 @@ const dataPath = join(__dirname, 'data.json')
 const app = express()
 const port = Number(process.env.PORT || 4000)
 const jwtSecret = process.env.JWT_SECRET || 'exam-ai-development-secret-change-me'
+const googleClientId = process.env.GOOGLE_CLIENT_ID || ''
+const googleClient = new OAuth2Client(googleClientId)
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .split(',')
@@ -93,6 +96,48 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password || '', user.passwordHash))) return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng.' })
   const { passwordHash, ...publicUser } = user
   res.json({ data: { token: issueToken(user), user: publicUser } })
+})
+
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password, name, role = 'student' } = req.body
+  if (!email?.trim() || !password || !name?.trim()) return res.status(400).json({ error: 'Họ tên, email và mật khẩu là bắt buộc.' })
+  if (password.length < 8) return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 8 ký tự.' })
+  if (role !== 'student') return res.status(400).json({ error: 'Chỉ cho phép đăng ký tài khoản học sinh.' })
+  const data = readData()
+  data.users ||= []
+  if (data.users.some((user) => user.email.toLowerCase() === email.trim().toLowerCase())) return res.status(409).json({ error: 'Email đã được sử dụng.' })
+  const user = { id: `student-${randomUUID()}`, email: email.trim().toLowerCase(), name: name.trim(), role: 'student', passwordHash: await bcrypt.hash(password, 12), createdAt: new Date().toISOString() }
+  data.users.push(user)
+  writeData(data)
+  const { passwordHash, ...publicUser } = user
+  res.status(201).json({ data: { token: issueToken(user), user: publicUser } })
+})
+
+app.post('/api/auth/google', async (req, res) => {
+  if (!googleClientId) return res.status(503).json({ error: 'Backend chưa cấu hình GOOGLE_CLIENT_ID.' })
+  const { credential } = req.body
+  if (!credential) return res.status(400).json({ error: 'Google credential là bắt buộc.' })
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: googleClientId })
+    const profile = ticket.getPayload()
+    if (!profile?.sub || !profile.email || !profile.email_verified) return res.status(401).json({ error: 'Tài khoản Google chưa được xác minh.' })
+    const data = readData()
+    data.users ||= []
+    let user = data.users.find((item) => item.googleSub === profile.sub || item.email.toLowerCase() === profile.email.toLowerCase())
+    if (!user) {
+      user = { id: `student-${randomUUID()}`, email: profile.email.toLowerCase(), name: profile.name || profile.email.split('@')[0], role: 'student', googleSub: profile.sub, avatarUrl: profile.picture || '', createdAt: new Date().toISOString() }
+      data.users.push(user)
+    } else if (!user.googleSub) {
+      user.googleSub = profile.sub
+      user.avatarUrl = profile.picture || user.avatarUrl || ''
+      writeData(data)
+    }
+    const { passwordHash, ...publicUser } = user
+    res.json({ data: { token: issueToken(user), user: publicUser } })
+  } catch (error) {
+    console.error('Google auth error:', error)
+    res.status(401).json({ error: 'Không thể xác minh tài khoản Google.' })
+  }
 })
 
 app.get('/api/auth/me', authenticate, (req, res) => {

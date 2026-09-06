@@ -72,3 +72,7 @@ Backend hiện cung cấp API REST và lưu file JSON. Khi Render restart, file 
 AI tạo đề hiện có hai luồng: chuyển file Word/PDF hoặc nội dung trắc nghiệm có sẵn thành bài online; hệ thống không tự thêm câu hỏi và không đoán đáp án nếu tài liệu không đánh dấu rõ.
 
 Hệ thống đã có đăng nhập JWT và ba vai trò `admin`, `teacher`, `student`. Giáo viên/admin có thể lưu và giao đề vào lớp; học sinh chỉ có thể làm bài và nộp bài. Tài khoản demo và API auth được ghi trong [server/README.md](server/README.md).
+
+Đăng ký email tạo tài khoản học sinh. Đăng nhập Google dùng Google Identity Services; cần cấu hình `GOOGLE_CLIENT_ID` trên Render và `VITE_GOOGLE_CLIENT_ID` trên Vercel với cùng một Web Client ID.
+
+Để bật Google: tạo OAuth 2.0 Client ID loại Web trong Google Cloud Console, thêm domain Vercel vào **Authorized JavaScript origins**, đặt cùng Client ID ở Render (`GOOGLE_CLIENT_ID`) và Vercel (`VITE_GOOGLE_CLIENT_ID`), sau đó redeploy cả hai service.

@@ -17,6 +17,8 @@ Tài khoản demo sau khi seed dữ liệu: `admin@examai.vn / Admin@123`, `teac
 ## Endpoint chính
 
 - `POST /auth/login`
+- `POST /auth/register` (chỉ đăng ký học sinh)
+- `POST /auth/google` (xác minh Google ID token)
 - `GET /auth/me`
 - `GET, POST /admin/users` (admin only)
 - `GET /health`
@@ -36,4 +38,6 @@ Tài khoản demo sau khi seed dữ liệu: `admin@examai.vn / Admin@123`, `teac
 - `POST /classes/:classId/exams/:examId/publish` (teacher/admin)
 
 Các endpoint cần đăng nhập nhận header `Authorization: Bearer <token>`.
+
+Google login cần tạo OAuth 2.0 Web Client ID trong Google Cloud Console. Thêm cùng Client ID vào `GOOGLE_CLIENT_ID` trên Render và `VITE_GOOGLE_CLIENT_ID` trên Vercel; thêm domain Vercel vào Authorized JavaScript origins.
 - `POST /ai/generate-exam`

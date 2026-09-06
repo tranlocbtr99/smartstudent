@@ -1,8 +1,8 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Bell, BookOpen, CalendarDays, Check, ChevronDown, ClipboardCheck,
-  Clock3, GraduationCap, LayoutDashboard, Menu, Plus, QrCode, Search, Settings,
+  Clock3, GraduationCap, LayoutDashboard, LogOut, Menu, Plus, QrCode, Search, Settings,
   Users, X, Zap,
 } from 'lucide-react'
 import QRCode from 'qrcode'
@@ -90,7 +90,7 @@ function App() {
         </nav>
         <div className="sidebar-bottom">
           <NavItem icon={<Settings size={18} />} label="Cài đặt" />
-          <button className="profile-card" onClick={() => { localStorage.removeItem('examai_token'); localStorage.removeItem('examai_user'); setUser(null) }}><div className="avatar avatar-dark">{user.name.split(' ').map((part) => part[0]).slice(-2).join('')}</div><div><strong>{user.name}</strong><small>{user.role}</small></div><ChevronDown size={15} /></button>
+          <div className="profile-card"><div className="avatar avatar-dark">{user.name.split(' ').map((part) => part[0]).slice(-2).join('')}</div><div><strong>{user.name}</strong><small>{user.role}</small></div><button className="logout-button" onClick={() => { localStorage.removeItem('examai_token'); localStorage.removeItem('examai_user'); setUser(null) }} title="Đăng xuất"><LogOut size={16} /><span>Đăng xuất</span></button></div>
         </div>
       </aside>
 
@@ -260,12 +260,27 @@ function AIGenerator() {
 function Assignment({ title, type, due, progress, tone }) { return <div className="assignment-row"><div className={`assignment-icon ${tone}`}><BookOpen size={19} /></div><div><strong>{title}</strong><small>{type} <span>·</span> {due}</small></div><span className={`assignment-progress ${tone}`}>{progress}</span><button className="row-arrow">→</button></div> }
 
 function Login({ onLogin }) {
+  const googleButtonRef = useRef(null)
+  const [mode, setMode] = useState('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('teacher@examai.vn')
   const [password, setPassword] = useState('Teacher@123')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); try { onLogin(await api.login({ email, password })) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } }
-  return <main className="auth-screen"><section className="auth-card"><div className="brand auth-brand"><span className="brand-mark"><GraduationCap size={20} /></span><span>Exam<span>AI</span></span></div><span className="section-kicker">KHÔNG GIAN HỌC TẬP</span><h1>Đăng nhập</h1><p>Quản lý lớp học và kiểm tra trực tuyến.</p><form className="auth-form" onSubmit={submit}><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Mật khẩu<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="api-alert">{error}</p>}<button className="primary-button" disabled={busy}>{busy ? 'Đang đăng nhập...' : 'Đăng nhập'}</button></form><small className="auth-hint">Demo: teacher@examai.vn / Teacher@123</small></section></main>
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId || !googleButtonRef.current) return
+    const renderGoogleButton = () => {
+      if (!window.google?.accounts?.id || !googleButtonRef.current) return
+      window.google.accounts.id.initialize({ client_id: clientId, callback: async ({ credential }) => { setBusy(true); setError(''); try { onLogin(await api.googleLogin(credential)) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } } })
+      googleButtonRef.current.innerHTML = ''
+      window.google.accounts.id.renderButton(googleButtonRef.current, { theme: 'outline', size: 'large', width: 340, text: 'continue_with' })
+    }
+    if (window.google?.accounts?.id) renderGoogleButton()
+    else { const script = document.createElement('script'); script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.onload = renderGoogleButton; document.head.appendChild(script) }
+  }, [onLogin])
+  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); try { onLogin(await (mode === 'login' ? api.login({ email, password }) : api.register({ name, email, password }))) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } }
+  return <main className="auth-screen"><section className="auth-card"><div className="brand auth-brand"><span className="brand-mark"><GraduationCap size={20} /></span><span>Exam<span>AI</span></span></div><span className="section-kicker">KHÔNG GIAN HỌC TẬP</span><h1>{mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</h1><p>{mode === 'login' ? 'Quản lý lớp học và kiểm tra trực tuyến.' : 'Đăng ký tài khoản học sinh để làm bài online.'}</p><div className="auth-switch"><button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Đăng nhập</button><button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Đăng ký</button></div><form className="auth-form" onSubmit={submit}>{mode === 'register' && <label>Họ và tên<input value={name} onChange={(event) => setName(event.target.value)} required /></label>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Mật khẩu<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label>{error && <p className="api-alert">{error}</p>}<button className="primary-button" disabled={busy}>{busy ? 'Đang xử lý...' : mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</button></form><div className="auth-divider"><span>hoặc</span></div><span className="google-label">{mode === 'login' ? 'Đăng nhập bằng Google' : 'Đăng ký bằng Google'}</span><div ref={googleButtonRef} className="google-button" />{!import.meta.env.VITE_GOOGLE_CLIENT_ID && <small className="auth-hint">Google login cần cấu hình VITE_GOOGLE_CLIENT_ID trên Vercel.</small>}{mode === 'login' && <small className="auth-hint">Demo: teacher@examai.vn / Teacher@123</small>}</section></main>
 }
 
 function AdminUsers() {
