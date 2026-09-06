@@ -23,7 +23,8 @@ Base URL: `http://localhost:4000/api`
 - `PATCH /attendance/:recordId`
 - `GET, POST /classes/:classId/assignments`
 - `GET /notifications`
-- `POST /ai/generate-exam-from-file` (multipart Word/PDF)
+- `POST /ai/generate-exam-from-file` (multipart Word/PDF, chuyển đổi đề có sẵn)
+- `POST /ai/convert-exam-text` (chuyển đổi nội dung đề nhập thủ công)
 - `POST /exams`
 - `GET /exams/:examId`
 - `POST /exams/:examId/attempts`

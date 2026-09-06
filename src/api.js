@@ -24,6 +24,7 @@ export const api = {
   getNotifications: () => request('/notifications'),
   generateExam: (body) => request('/ai/generate-exam', { method: 'POST', body: JSON.stringify(body) }),
   generateExamFromFile: (formData) => request('/ai/generate-exam-from-file', { method: 'POST', headers: {}, body: formData }),
+  convertExamText: (body) => request('/ai/convert-exam-text', { method: 'POST', body: JSON.stringify(body) }),
   saveExam: (body) => request('/exams', { method: 'POST', body: JSON.stringify(body) }),
   getExam: (examId) => request(`/exams/${examId}`),
   getExams: () => request('/exams'),

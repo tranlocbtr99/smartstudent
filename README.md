@@ -68,3 +68,5 @@ Lưu ý: `server/data.json` phù hợp cho demo và development. Production nên
 ## Phạm vi hiện tại
 
 Backend hiện cung cấp API REST và lưu file JSON. Khi Render restart, file JSON có thể bị reset; production nên chuyển sang PostgreSQL, Firebase hoặc Supabase. Backend đã giới hạn CORS bằng biến `ALLOWED_ORIGINS`; nếu đổi domain Vercel, cập nhật biến này trên Render rồi redeploy.
+
+AI tạo đề hiện có hai luồng: chuyển file Word/PDF hoặc nội dung trắc nghiệm có sẵn thành bài online; hệ thống không tự thêm câu hỏi và không đoán đáp án nếu tài liệu không đánh dấu rõ.

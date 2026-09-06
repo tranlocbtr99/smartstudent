@@ -102,9 +102,14 @@ app.post('/api/ai/generate-exam-from-file', upload.single('file'), async (req, r
     return res.status(422).json({ error: 'Không thể đọc nội dung file. Hãy thử file Word hoặc PDF khác.' })
   }
   if (!sourceText.trim()) return res.status(422).json({ error: 'File không có nội dung văn bản có thể đọc.' })
-  const { questionCount = 10, difficulty = 'medium', instructions = '' } = req.body
-  req.body = { topic: sourceText.slice(0, 30000), questionCount, difficulty, language: 'Vietnamese', instructions: `Dựa hoàn toàn trên tài liệu sau và không bịa ngoài tài liệu. ${instructions}` }
-  return generateExamFromGemini(req, res)
+  const { instructions = '' } = req.body
+  return convertExamText(sourceText, instructions, res)
+})
+
+app.post('/api/ai/convert-exam-text', async (req, res) => {
+  const { text, instructions = '' } = req.body
+  if (!text?.trim()) return res.status(400).json({ error: 'Nội dung đề thi là bắt buộc.' })
+  return convertExamText(text, instructions, res)
 })
 
 app.post('/api/exams', (req, res) => {
@@ -162,6 +167,35 @@ ${topic}`
     if (!exam.title || !Array.isArray(exam.questions)) return res.status(502).json({ error: 'Định dạng đề thi từ AI không hợp lệ.' })
     res.json({ data: exam })
   } catch (error) { console.error('AI generation error:', error); res.status(502).json({ error: 'Không thể tạo đề từ nội dung tài liệu.' }) }
+}
+
+async function convertExamText(sourceText, instructions, res) {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) return res.status(503).json({ error: 'Backend chưa được cấu hình GEMINI_API_KEY.' })
+  const prompt = `Bạn là bộ chuyển đổi đề thi, không phải người sáng tác đề. Nội dung đầu vào bên dưới đã là một đề trắc nghiệm hoàn chỉnh. Hãy chuyển nguyên trạng thành JSON để chạy online.
+Quy tắc bắt buộc:
+- Không tạo thêm câu hỏi.
+- Không đổi ý nghĩa câu hỏi hoặc lựa chọn.
+- Giữ nguyên thứ tự câu hỏi và các lựa chọn.
+- Chỉ nhận diện đáp án đúng nếu tài liệu đánh dấu rõ bằng đáp án, ký hiệu, hoặc phần đáp án cuối tài liệu. Nếu không nhận diện được, đặt correctAnswer là null.
+- Không tự đoán đáp án.
+- Giữ giải thích nếu tài liệu có; nếu không có, để chuỗi rỗng.
+- Nếu câu không đủ 4 lựa chọn hoặc không phải trắc nghiệm, vẫn giữ câu đó nhưng dùng các lựa chọn đang có.
+${instructions ? `Yêu cầu định dạng thêm: ${instructions}` : ''}
+Chỉ trả về JSON hợp lệ, không markdown, theo schema:
+{"title":"string","subject":"string","questions":[{"question":"string","options":["string"],"correctAnswer":0,"explanation":"string"}]}
+NỘI DUNG ĐỀ THI:
+${sourceText.slice(0, 50000)}`
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) })
+    const payload = await response.json()
+    if (!response.ok) return res.status(502).json({ error: payload.error?.message || 'Gemini không thể chuyển đổi đề.' })
+    const text = payload.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text) return res.status(502).json({ error: 'Gemini trả về dữ liệu rỗng.' })
+    const exam = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim())
+    if (!exam.title || !Array.isArray(exam.questions) || !exam.questions.length) return res.status(502).json({ error: 'Không nhận diện được câu hỏi trắc nghiệm trong tài liệu.' })
+    res.json({ data: exam })
+  } catch (error) { console.error('Exam conversion error:', error); res.status(502).json({ error: 'Không thể chuyển đổi đề thi từ tài liệu.' }) }
 }
 
 app.get('/api/classes', (_req, res) => {
