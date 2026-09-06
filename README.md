@@ -67,4 +67,4 @@ Lưu ý: `server/data.json` phù hợp cho demo và development. Production nên
 
 ## Phạm vi hiện tại
 
-Frontend hiện vẫn có dữ liệu mock để demo nhanh; backend mới đã cung cấp API REST và lưu file JSON. Firebase/PostgreSQL, đăng nhập thật, phân quyền, QR điểm danh thật và AI tạo đề là các bước tiếp theo khi đưa lên production.
+Backend hiện cung cấp API REST và lưu file JSON. Khi Render restart, file JSON có thể bị reset; production nên chuyển sang PostgreSQL, Firebase hoặc Supabase. Backend đã giới hạn CORS bằng biến `ALLOWED_ORIGINS`; nếu đổi domain Vercel, cập nhật biến này trên Render rồi redeploy.

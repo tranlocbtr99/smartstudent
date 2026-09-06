@@ -8,3 +8,5 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 24
+      - key: ALLOWED_ORIGINS
+        value: https://smartstudent-omega.vercel.app,http://localhost:5173

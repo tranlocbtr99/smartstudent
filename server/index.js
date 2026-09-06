@@ -9,8 +9,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataPath = join(__dirname, 'data.json')
 const app = express()
 const port = Number(process.env.PORT || 4000)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
-app.use(cors())
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    return callback(null, false)
+  },
+}))
 app.use(express.json())
 
 function readData() {
