@@ -9,4 +9,4 @@ services:
       - key: NODE_VERSION
         value: 24
       - key: ALLOWED_ORIGINS
-        value: https://smartstudent-omega.vercel.app,http://localhost:5173
+        value: https://smartstudent-94kq97cdo-tranlocbtr99.vercel.app,https://smartstudent-omega.vercel.app,http://localhost:5173

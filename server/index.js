@@ -13,10 +13,11 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)
+const isExamAiVercelOrigin = (origin) => /^https:\/\/smartstudent(?:-[a-z0-9-]+)?-tranlocbtr99\.vercel\.app$/.test(origin)
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    if (!origin || allowedOrigins.includes(origin) || isExamAiVercelOrigin(origin)) return callback(null, true)
     return callback(null, false)
   },
 }))
