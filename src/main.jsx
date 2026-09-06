@@ -28,6 +28,7 @@ function App() {
   const [showClassModal, setShowClassModal] = useState(false)
   const [showNotice, setShowNotice] = useState(false)
   const [notifications, setNotifications] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
   const selectedClass = classes.find((item) => item.code === selectedCode) ?? classes[0]
 
   useEffect(() => {
@@ -53,7 +54,7 @@ function App() {
     const name = form.get('name')?.trim()
     const code = form.get('code')?.trim().toUpperCase()
     if (!name || !code) return
-    api.createClass({ code, name })
+    api.createClass({ code, name, subject: form.get('subject')?.trim(), room: form.get('room')?.trim(), schedule: form.get('schedule')?.trim() })
       .then((created) => {
         setClasses((current) => [...current, { ...created, students: 0, sessions: 0, accent: 'blue', active: false }])
         setSelectedCode(created.code)
@@ -89,21 +90,21 @@ function App() {
         <header className="topbar">
           <button className="mobile-menu icon-button" aria-label="Mở menu"><Menu size={20} /></button>
           <div className="breadcrumb"><span>Không gian giảng dạy</span><span>/</span><strong>Lớp học</strong></div>
-          <div className="top-actions"><div className="search-box"><Search size={17} /><input aria-label="Tìm kiếm" placeholder="Tìm kiếm..." /></div><button className="icon-button notification-button" aria-label="Thông báo" onClick={() => setShowNotice(!showNotice)}><Bell size={19} />{notifications.length > 0 && <i>{notifications.length}</i>}</button><div className="avatar avatar-small">NA</div></div>
+          <div className="top-actions"><div className="search-box"><Search size={17} /><input aria-label="Tìm kiếm lớp học" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Tìm kiếm lớp..." /></div><button className="icon-button notification-button" aria-label="Thông báo" onClick={() => setShowNotice(!showNotice)}><Bell size={19} />{notifications.length > 0 && <i>{notifications.length}</i>}</button><div className="avatar avatar-small">NA</div></div>
           {showNotice && <div className="notification-popover"><strong>Thông báo mới</strong>{notifications.length ? notifications.slice(0, 4).map((notification) => <p key={notification.id}>{notification.message}</p>) : <p>Chưa có thông báo mới.</p>}</div>}
         </header>
 
         <div className="content-wrap">
-          {apiError && <div className="api-alert">API chưa kết nối: {apiError}. Đang hiển thị dữ liệu demo.</div>}
+          {apiError && <div className="api-alert">API chưa kết nối: {apiError}. Hãy kiểm tra backend production.</div>}
           {loading && <div className="loading-bar" aria-label="Đang tải dữ liệu" />}
           <section className="page-heading"><div><p className="eyebrow">THỨ HAI, 06 THÁNG 09, 2026</p><h1>Lớp học</h1><p className="muted">Theo dõi lớp, điểm danh và giao bài tập trong một nơi.</p></div><button className="primary-button" onClick={() => setShowClassModal(true)}><Plus size={18} /> Tạo lớp học</button></section>
 
           <section className="class-strip" aria-label="Danh sách lớp học">
             <div className="class-strip-title"><span className="section-kicker">LỚP CỦA TÔI</span><button className="round-add" aria-label="Tạo lớp học" onClick={() => setShowClassModal(true)}><Plus size={16} /></button></div>
-            <div className="class-cards">{classes.map((item) => <button key={item.code} className={`class-card ${item.code === selectedCode ? 'selected' : ''}`} onClick={() => { setSelectedCode(item.code); setActiveTab('overview') }}><span className={`class-dot ${item.accent}`} /><span className="class-info"><strong>{item.code}</strong><small>{item.name}</small></span><span className="class-count">{item.students} <small>HS</small></span></button>)}</div>
+            <div className="class-cards">{classes.filter((item) => `${item.code} ${item.name}`.toLowerCase().includes(searchTerm.toLowerCase())).map((item) => <button key={item.code} className={`class-card ${item.code === selectedCode ? 'selected' : ''}`} onClick={() => { setSelectedCode(item.code); setActiveTab('overview') }}><span className={`class-dot ${item.accent}`} /><span className="class-info"><strong>{item.code}</strong><small>{item.name}</small></span><span className="class-count">{item.students} <small>HS</small></span></button>)}{!classes.some((item) => `${item.code} ${item.name}`.toLowerCase().includes(searchTerm.toLowerCase())) && <p className="interaction-hint">Không tìm thấy lớp phù hợp.</p>}</div>
           </section>
 
-          <section className="class-header"><div><div className="title-line"><h2>{selectedClass.code}</h2><span className="live-badge"><span /> Đang hoạt động</span></div><p>{selectedClass.name} <span className="divider">·</span> Thứ 2, 18:00 – 20:00 <span className="divider">·</span> Phòng A302</p></div><button className="secondary-button"><Settings size={16} /> Quản lý lớp</button></section>
+          <section className="class-header"><div><div className="title-line"><h2>{selectedClass.code}</h2><span className="live-badge"><span /> Đang hoạt động</span></div><p>{selectedClass.name} <span className="divider">·</span> {selectedClass.schedule || 'Chưa có lịch học'} <span className="divider">·</span> {selectedClass.room || 'Chưa có phòng'}</p></div><button className="secondary-button"><Settings size={16} /> Quản lý lớp</button></section>
 
           <div className="tabs" role="tablist">{tabs.map((tab) => <button key={tab.id} className={activeTab === tab.id ? 'active' : ''} onClick={() => setActiveTab(tab.id)}>{tab.label}{tab.id === 'assignments' && <span className="tab-count">4</span>}</button>)}</div>
 
@@ -114,7 +115,7 @@ function App() {
         </div>
       </main>
 
-      {showClassModal && <div className="modal-backdrop" onMouseDown={() => setShowClassModal(false)}><div className="modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-head"><div><span className="modal-icon"><Users size={18} /></span><h2>Tạo lớp học mới</h2><p>Thiết lập thông tin lớp để bắt đầu quản lý.</p></div><button className="icon-button" onClick={() => setShowClassModal(false)} aria-label="Đóng"><X size={19} /></button></div><form onSubmit={createClass}><label>Tên lớp học<input name="name" placeholder="Ví dụ: Kinh tế vi mô K60" required /></label><label>Mã lớp<input name="code" placeholder="Ví dụ: KTVM-K60" required /></label><div className="form-row"><label>Môn học<input placeholder="Kinh tế vi mô" /></label><label>Phòng học<input placeholder="A302" /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowClassModal(false)}>Hủy</button><button className="primary-button" type="submit"><Plus size={17} /> Tạo lớp</button></div></form></div></div>}
+      {showClassModal && <div className="modal-backdrop" onMouseDown={() => setShowClassModal(false)}><div className="modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-head"><div><span className="modal-icon"><Users size={18} /></span><h2>Tạo lớp học mới</h2><p>Thiết lập thông tin lớp để bắt đầu quản lý.</p></div><button className="icon-button" onClick={() => setShowClassModal(false)} aria-label="Đóng"><X size={19} /></button></div><form onSubmit={createClass}><label>Tên lớp học<input name="name" placeholder="Ví dụ: Kinh tế vi mô K60" required /></label><label>Mã lớp<input name="code" placeholder="Ví dụ: KTVM-K60" required /></label><div className="form-row"><label>Môn học<input name="subject" placeholder="Kinh tế vi mô" /></label><label>Phòng học<input name="room" placeholder="A302" /></label></div><label>Lịch học<input name="schedule" placeholder="Thứ 2, 18:00 - 20:00" /></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowClassModal(false)}>Hủy</button><button className="primary-button" type="submit"><Plus size={17} /> Tạo lớp</button></div></form></div></div>}
     </div>
   )
 }
