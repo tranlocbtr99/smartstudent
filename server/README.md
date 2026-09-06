@@ -10,7 +10,7 @@ npm run server
 
 Base URL: `http://localhost:4000/api`
 
-Để dùng AI tạo đề, đặt biến môi trường `GEMINI_API_KEY` trên Render hoặc terminal backend local. Không đặt key này ở Vercel/frontend.
+Để dùng AI chuyển đề, đặt `GEMINI_API_KEY` và `GEMINI_MODEL=gemini-3.6-flash` trên Render hoặc terminal backend local. Không đặt key này ở Vercel/frontend.
 
 ## Endpoint chính
 

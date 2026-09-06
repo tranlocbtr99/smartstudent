@@ -12,3 +12,5 @@ services:
         value: https://smartstudent-ky69031f3-tranlocbtr99.vercel.app,https://smartstudent-94kq97cdo-tranlocb99.vercel.app,https://smartstudent-94kq97cdo-tranlocbtr99.vercel.app,https://smartstudent-omega.vercel.app,http://localhost:5173
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
