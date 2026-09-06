@@ -1,0 +1,126 @@
+{
+  "classes": [
+    {
+      "id": "class-ktvm-k60",
+      "code": "KTVM-K60",
+      "name": "Kinh tế vi mô",
+      "subject": "Kinh tế vi mô",
+      "room": "A302",
+      "schedule": "Thứ 2, 18:00 - 20:00",
+      "teacherId": "teacher-nguyen-van-a",
+      "createdAt": "2026-09-01T09:00:00.000Z"
+    }
+  ],
+  "students": [
+    {
+      "id": "HS00128",
+      "name": "Nguyễn Văn An",
+      "email": "an@example.com",
+      "classId": "class-ktvm-k60",
+      "status": "present",
+      "score": 8.8
+    },
+    {
+      "id": "HS00131",
+      "name": "Trần Minh Bảo",
+      "email": "bao@example.com",
+      "classId": "class-ktvm-k60",
+      "status": "late",
+      "score": 7.9
+    },
+    {
+      "id": "HS00142",
+      "name": "Lê Hoàng Chi",
+      "email": "chi@example.com",
+      "classId": "class-ktvm-k60",
+      "status": "present",
+      "score": 9.2
+    },
+    {
+      "id": "HS00147",
+      "name": "Phạm Gia Hân",
+      "email": "han@example.com",
+      "classId": "class-ktvm-k60",
+      "status": "absent",
+      "score": 8.1
+    },
+    {
+      "id": "HS00153",
+      "name": "Đỗ Tuấn Kiệt",
+      "email": "kiet@example.com",
+      "classId": "class-ktvm-k60",
+      "status": "excused",
+      "score": 7.5
+    }
+  ],
+  "attendanceSessions": [
+    {
+      "id": "attendance-54738f74-a1bc-41e4-bea1-044392460bc9",
+      "classId": "class-ktvm-k60",
+      "code": "206760",
+      "startsAt": "2026-09-06T13:41:49.766Z",
+      "expiresAt": "2026-09-06T13:43:49.766Z",
+      "status": "active"
+    }
+  ],
+  "attendanceRecords": [
+    {
+      "id": "record-f29772f9-8ad9-44d6-ae23-22a300e7e437",
+      "sessionId": "attendance-54738f74-a1bc-41e4-bea1-044392460bc9",
+      "studentId": "HS00128",
+      "status": "absent",
+      "checkedAt": null
+    },
+    {
+      "id": "record-cbc279df-7427-4473-9342-675adabe2aa7",
+      "sessionId": "attendance-54738f74-a1bc-41e4-bea1-044392460bc9",
+      "studentId": "HS00131",
+      "status": "absent",
+      "checkedAt": null
+    },
+    {
+      "id": "record-a0f1cd73-4bf6-4ce6-a4ca-774b7384e254",
+      "sessionId": "attendance-54738f74-a1bc-41e4-bea1-044392460bc9",
+      "studentId": "HS00142",
+      "status": "absent",
+      "checkedAt": null
+    },
+    {
+      "id": "record-285ffd6d-5f90-49ff-9dea-d1c6555da68c",
+      "sessionId": "attendance-54738f74-a1bc-41e4-bea1-044392460bc9",
+      "studentId": "HS00147",
+      "status": "absent",
+      "checkedAt": null
+    },
+    {
+      "id": "record-16cb9d90-a8e8-4024-9321-1599005f0a72",
+      "sessionId": "attendance-54738f74-a1bc-41e4-bea1-044392460bc9",
+      "studentId": "HS00153",
+      "status": "absent",
+      "checkedAt": null
+    }
+  ],
+  "assignments": [
+    {
+      "id": "assignment-chapter-1",
+      "classId": "class-ktvm-k60",
+      "title": "Kinh tế vi mô - Chương 1",
+      "type": "exam",
+      "dueAt": "2026-09-09T23:59:00.000Z",
+      "status": "published",
+      "submitted": 28,
+      "total": 32
+    },
+    {
+      "id": "assignment-supply-demand",
+      "classId": "class-ktvm-k60",
+      "title": "Phiếu bài tập - Cung và cầu",
+      "type": "document",
+      "dueAt": "2026-09-12T23:59:00.000Z",
+      "status": "published",
+      "submitted": 0,
+      "total": 32
+    }
+  ],
+  "notifications": []
+}
