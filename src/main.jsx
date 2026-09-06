@@ -89,7 +89,7 @@ function App() {
           {user.role !== 'student' && <NavItem icon={<Zap size={18} />} label="AI tạo đề" onClick={() => setActiveTab('ai')} active={activeTab === 'ai'} />}
         </nav>
         <div className="sidebar-bottom">
-          <NavItem icon={<Settings size={18} />} label="Cài đặt" />
+          <NavItem icon={<Settings size={18} />} label="Cài đặt" onClick={() => setActiveTab('settings')} active={activeTab === 'settings'} />
           <div className="profile-card"><div className="avatar avatar-dark">{user.name.split(' ').map((part) => part[0]).slice(-2).join('')}</div><div><strong>{user.name}</strong><small>{user.role}</small></div><button className="logout-button" onClick={() => { localStorage.removeItem('examai_token'); localStorage.removeItem('examai_user'); setUser(null) }} title="Đăng xuất"><LogOut size={16} /><span>Đăng xuất</span></button></div>
         </div>
       </aside>
@@ -122,6 +122,7 @@ function App() {
           {activeTab === 'assignments' && <Assignments classId={selectedClass.id} />}
           {activeTab === 'exams' && <ExamRunner />}
           {activeTab === 'admin' && user.role === 'admin' && <AdminUsers />}
+          {activeTab === 'settings' && <AccountSettings user={user} onUserUpdated={setUser} />}
           {activeTab === 'ai' && <AIGeneratorV2 classId={selectedClass.id} />}
         </div>
       </main>
@@ -261,14 +262,20 @@ function Assignment({ title, type, due, progress, tone }) { return <div classNam
 
 function Login({ onLogin }) {
   const googleButtonRef = useRef(null)
-  const [mode, setMode] = useState('login')
+  const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get('resetToken') || '')
+  const [mode, setMode] = useState(() => new URLSearchParams(window.location.search).get('resetToken') ? 'reset' : 'login')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('teacher@examai.vn')
+  const [username, setUsername] = useState('teacher@examai.vn')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [studentCode, setStudentCode] = useState('')
   const [password, setPassword] = useState('Teacher@123')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (mode === 'forgot' || mode === 'reset') return
     if (!clientId || !googleButtonRef.current) return
     const renderGoogleButton = () => {
       if (!window.google?.accounts?.id || !googleButtonRef.current) return
@@ -278,9 +285,10 @@ function Login({ onLogin }) {
     }
     if (window.google?.accounts?.id) renderGoogleButton()
     else { const script = document.createElement('script'); script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.onload = renderGoogleButton; document.head.appendChild(script) }
-  }, [onLogin])
-  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); try { onLogin(await (mode === 'login' ? api.login({ email, password }) : api.register({ name, email, password }))) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } }
-  return <main className="auth-screen"><section className="auth-card"><div className="brand auth-brand"><span className="brand-mark"><GraduationCap size={20} /></span><span>Exam<span>AI</span></span></div><span className="section-kicker">KHÔNG GIAN HỌC TẬP</span><h1>{mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</h1><p>{mode === 'login' ? 'Quản lý lớp học và kiểm tra trực tuyến.' : 'Đăng ký tài khoản học sinh để làm bài online.'}</p><div className="auth-switch"><button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>Đăng nhập</button><button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>Đăng ký</button></div><form className="auth-form" onSubmit={submit}>{mode === 'register' && <label>Họ và tên<input value={name} onChange={(event) => setName(event.target.value)} required /></label>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Mật khẩu<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label>{error && <p className="api-alert">{error}</p>}<button className="primary-button" disabled={busy}>{busy ? 'Đang xử lý...' : mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</button></form><div className="auth-divider"><span>hoặc</span></div><span className="google-label">{mode === 'login' ? 'Đăng nhập bằng Google' : 'Đăng ký bằng Google'}</span><div ref={googleButtonRef} className="google-button" />{!import.meta.env.VITE_GOOGLE_CLIENT_ID && <small className="auth-hint">Google login cần cấu hình VITE_GOOGLE_CLIENT_ID trên Vercel.</small>}{mode === 'login' && <small className="auth-hint">Demo: teacher@examai.vn / Teacher@123</small>}</section></main>
+  }, [onLogin, mode])
+  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); try { if (mode === 'forgot') { setError((await api.forgotPassword(email)).message); return } if (mode === 'reset') { if (password !== confirmPassword) throw new Error('Mật khẩu xác nhận không khớp.'); setError((await api.resetPassword({ token: resetToken, password })).message); setPassword(''); setConfirmPassword(''); window.history.replaceState({}, '', window.location.pathname); setMode('login'); return } onLogin(await (mode === 'login' ? api.login({ identifier: username, password }) : api.register({ name, username, email, phone, studentCode, password }))) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } }
+  const switchMode = (nextMode) => { setMode(nextMode); setError(''); setBusy(false) }
+  return <main className="auth-screen"><section className="auth-card"><div className="brand auth-brand"><span className="brand-mark"><GraduationCap size={20} /></span><span>Exam<span>AI</span></span></div><span className="section-kicker">KHÔNG GIAN HỌC TẬP</span><h1>{mode === 'login' ? 'Đăng nhập' : mode === 'register' ? 'Tạo tài khoản' : mode === 'reset' ? 'Đặt lại mật khẩu' : 'Quên mật khẩu'}</h1><p>{mode === 'login' ? 'Quản lý lớp học và kiểm tra trực tuyến.' : mode === 'register' ? 'Đăng ký tài khoản học sinh để làm bài online.' : mode === 'reset' ? 'Tạo mật khẩu mới cho tài khoản của bạn.' : 'Nhập email để nhận hướng dẫn đặt lại mật khẩu.'}</p>{mode !== 'forgot' && mode !== 'reset' && <div className="auth-switch"><button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>Đăng nhập</button><button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>Đăng ký</button></div>}<form className="auth-form" onSubmit={submit}>{mode === 'register' && <><label>Họ và tên<input value={name} onChange={(event) => setName(event.target.value)} required /></label><label>Tên tài khoản<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="vd: nguyenvana" required /></label></>}{mode === 'forgot' && <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>}{mode === 'login' && <label>Email hoặc tên tài khoản<input value={username} onChange={(event) => setUsername(event.target.value)} required /></label>}{mode === 'register' && <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>}{mode === 'register' && <><label>Số điện thoại<input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Không bắt buộc" /></label><label>Mã học sinh<input value={studentCode} onChange={(event) => setStudentCode(event.target.value)} placeholder="Không bắt buộc" /></label></>}{mode !== 'forgot' && <label>Mật khẩu<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /></label>}{mode === 'reset' && <label>Xác nhận mật khẩu<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} required /></label>}{error && <p className={mode === 'forgot' || mode === 'reset' ? 'success-alert' : 'api-alert'}>{error}</p>}<button className="primary-button" disabled={busy}>{busy ? 'Đang xử lý...' : mode === 'login' ? 'Đăng nhập' : mode === 'register' ? 'Tạo tài khoản' : mode === 'reset' ? 'Đặt lại mật khẩu' : 'Gửi hướng dẫn'}</button></form>{mode === 'login' && <button className="link-button" onClick={() => switchMode('forgot')}>Quên mật khẩu?</button>}{(mode === 'forgot' || mode === 'reset') && <button className="link-button" onClick={() => switchMode('login')}>← Quay lại đăng nhập</button>}{mode !== 'forgot' && mode !== 'reset' && <><div className="auth-divider"><span>hoặc</span></div><span className="google-label">{mode === 'login' ? 'Đăng nhập bằng Google' : 'Đăng ký bằng Google'}</span><div ref={googleButtonRef} className="google-button" />{!import.meta.env.VITE_GOOGLE_CLIENT_ID && <small className="auth-hint">Google login cần cấu hình VITE_GOOGLE_CLIENT_ID trên Vercel.</small>}</>}{mode === 'login' && <small className="auth-hint">Demo: teacher@examai.vn / Teacher@123</small>}</section></main>
 }
 
 function AdminUsers() {
@@ -290,6 +298,16 @@ function AdminUsers() {
   useEffect(() => { api.getAdminUsers().then(setUsers).catch((requestError) => setError(requestError.message)) }, [])
   async function createUser(event) { event.preventDefault(); const form = new FormData(event.currentTarget); try { const user = await api.createAdminUser({ name: form.get('name'), email: form.get('email'), password: form.get('password'), role: form.get('role') }); setUsers((current) => [...current, user]); event.currentTarget.reset(); setShowForm(false) } catch (requestError) { setError(requestError.message) } }
   return <section className="panel full-panel"><div className="panel-head"><div><span className="section-kicker">QUẢN TRỊ HỆ THỐNG</span><h3>Người dùng</h3></div><button className="primary-button" onClick={() => setShowForm(!showForm)}><Plus size={17} /> Tạo tài khoản</button></div>{error && <p className="interaction-hint">{error}</p>}{showForm && <form className="inline-form" onSubmit={createUser}><input name="name" placeholder="Họ tên" required /><input name="email" type="email" placeholder="Email" required /><input name="password" type="password" placeholder="Mật khẩu" required /><select name="role" defaultValue="student"><option value="student">Học sinh</option><option value="teacher">Giáo viên</option><option value="admin">Admin</option></select><button className="primary-button">Tạo</button></form>}<div className="student-table">{users.map((user) => <div className="table-row" key={user.id}><div className="student-cell"><div className="avatar avatar-table">{user.name.split(' ').map((part) => part[0]).slice(-2).join('')}</div><div><strong>{user.name}</strong><small>{user.email}</small></div></div><span className="assignment-progress blue">{user.role}</span><span className="attendance-time">{new Date(user.createdAt).toLocaleDateString('vi-VN')}</span><span /></div>)}</div></section>
+}
+
+function AccountSettings({ user, onUserUpdated }) {
+  const [profile, setProfile] = useState({ name: user.name || '', phone: user.phone || '', studentCode: user.studentCode || '' })
+  const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  async function saveProfile(event) { event.preventDefault(); setError(''); setMessage(''); try { const updated = await api.updateProfile(profile); onUserUpdated(updated); setMessage('Thông tin cá nhân đã được cập nhật.') } catch (requestError) { setError(requestError.message) } }
+  async function changePassword(event) { event.preventDefault(); setError(''); setMessage(''); try { setMessage((await api.changePassword(passwords)).message); setPasswords({ currentPassword: '', newPassword: '' }) } catch (requestError) { setError(requestError.message) } }
+  return <section className="settings-grid"><section className="panel"><span className="section-kicker">TÀI KHOẢN</span><h3>Thông tin cá nhân</h3><form className="auth-form settings-form" onSubmit={saveProfile}><label>Họ và tên<input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required /></label><label>Email<input value={user.email} disabled /></label><label>Số điện thoại<input value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} /></label><label>Mã học sinh<input value={profile.studentCode} onChange={(event) => setProfile({ ...profile, studentCode: event.target.value })} /></label><button className="primary-button">Lưu thông tin</button></form></section><section className="panel"><span className="section-kicker">BẢO MẬT</span><h3>Thay đổi mật khẩu</h3><form className="auth-form settings-form" onSubmit={changePassword}><label>Mật khẩu hiện tại<input type="password" value={passwords.currentPassword} onChange={(event) => setPasswords({ ...passwords, currentPassword: event.target.value })} required /></label><label>Mật khẩu mới<input type="password" minLength={8} value={passwords.newPassword} onChange={(event) => setPasswords({ ...passwords, newPassword: event.target.value })} required /></label><button className="primary-button">Đổi mật khẩu</button></form>{message && <p className="success-alert">{message}</p>}{error && <p className="api-alert">{error}</p>}</section></section>
 }
 
 function ExamRunner() {

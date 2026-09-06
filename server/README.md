@@ -14,10 +14,16 @@ Base URL: `http://localhost:4000/api`
 
 Tài khoản demo sau khi seed dữ liệu: `admin@examai.vn / Admin@123`, `teacher@examai.vn / Teacher@123`, `student@examai.vn / Student@123`. Hãy đổi mật khẩu và `JWT_SECRET` trước khi dùng production.
 
+Quên mật khẩu production cần cấu hình `RESEND_API_KEY`, `MAIL_FROM` và `APP_URL`. Nếu chưa cấu hình email, backend chỉ trả token reset trong môi trường development, không trả token khi production.
+
 ## Endpoint chính
 
 - `POST /auth/login`
 - `POST /auth/register` (chỉ đăng ký học sinh)
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `PATCH /auth/profile` (đã đăng nhập)
+- `PATCH /auth/password` (đã đăng nhập)
 - `POST /auth/google` (xác minh Google ID token)
 - `GET /auth/me`
 - `GET, POST /admin/users` (admin only)

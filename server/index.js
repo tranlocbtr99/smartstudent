@@ -7,6 +7,7 @@ import multer from 'multer'
 import mammoth from 'mammoth'
 import { PDFParse } from 'pdf-parse'
 import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +19,7 @@ const port = Number(process.env.PORT || 4000)
 const jwtSecret = process.env.JWT_SECRET || 'exam-ai-development-secret-change-me'
 const googleClientId = process.env.GOOGLE_CLIENT_ID || ''
 const googleClient = new OAuth2Client(googleClientId)
+const appUrl = process.env.APP_URL || 'http://localhost:5173'
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .split(',')
@@ -48,6 +50,15 @@ function findClass(data, classId) {
 
 function issueToken(user) {
   return jwt.sign({ sub: user.id, role: user.role, email: user.email, name: user.name }, jwtSecret, { expiresIn: '7d' })
+}
+
+function publicUser(user) {
+  const { passwordHash, ...safeUser } = user
+  return safeUser
+}
+
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase()
 }
 
 function authenticate(req, res, next) {
@@ -90,27 +101,60 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body
+  const { identifier, email, password } = req.body
   const data = readData()
-  const user = (data.users || []).find((item) => item.email.toLowerCase() === String(email || '').trim().toLowerCase())
+  const loginIdentifier = String(identifier || email || '').trim().toLowerCase()
+  const user = (data.users || []).find((item) => item.email.toLowerCase() === loginIdentifier || item.username?.toLowerCase() === loginIdentifier)
   if (!user || !(await bcrypt.compare(password || '', user.passwordHash))) return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng.' })
-  const { passwordHash, ...publicUser } = user
-  res.json({ data: { token: issueToken(user), user: publicUser } })
+  res.json({ data: { token: issueToken(user), user: publicUser(user) } })
 })
 
 app.post('/api/auth/register', async (req, res) => {
-  const { email, password, name, role = 'student' } = req.body
-  if (!email?.trim() || !password || !name?.trim()) return res.status(400).json({ error: 'Họ tên, email và mật khẩu là bắt buộc.' })
+  const { email, password, name, username, phone = '', studentCode = '', role = 'student' } = req.body
+  const normalizedUsername = normalizeUsername(username)
+  if (!email?.trim() || !password || !name?.trim() || !normalizedUsername) return res.status(400).json({ error: 'Họ tên, tên tài khoản, email và mật khẩu là bắt buộc.' })
+  if (!/^[a-z0-9._-]{3,30}$/.test(normalizedUsername)) return res.status(400).json({ error: 'Tên tài khoản dùng 3-30 ký tự: chữ thường, số, ., _ hoặc -.' })
   if (password.length < 8) return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 8 ký tự.' })
   if (role !== 'student') return res.status(400).json({ error: 'Chỉ cho phép đăng ký tài khoản học sinh.' })
   const data = readData()
   data.users ||= []
   if (data.users.some((user) => user.email.toLowerCase() === email.trim().toLowerCase())) return res.status(409).json({ error: 'Email đã được sử dụng.' })
-  const user = { id: `student-${randomUUID()}`, email: email.trim().toLowerCase(), name: name.trim(), role: 'student', passwordHash: await bcrypt.hash(password, 12), createdAt: new Date().toISOString() }
+  if (data.users.some((user) => user.username?.toLowerCase() === normalizedUsername)) return res.status(409).json({ error: 'Tên tài khoản đã được sử dụng.' })
+  const user = { id: `student-${randomUUID()}`, username: normalizedUsername, email: email.trim().toLowerCase(), name: name.trim(), phone: phone.trim(), studentCode: studentCode.trim(), role: 'student', passwordHash: await bcrypt.hash(password, 12), createdAt: new Date().toISOString() }
   data.users.push(user)
   writeData(data)
-  const { passwordHash, ...publicUser } = user
-  res.status(201).json({ data: { token: issueToken(user), user: publicUser } })
+  res.status(201).json({ data: { token: issueToken(user), user: publicUser(user) } })
+})
+
+app.post('/api/auth/forgot-password', (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase()
+  const data = readData()
+  const user = data.users?.find((item) => item.email.toLowerCase() === email)
+  const response = { message: 'Nếu email tồn tại, hướng dẫn đặt lại mật khẩu sẽ được gửi đến hộp thư.' }
+  if (user) {
+    const rawToken = randomUUID().replaceAll('-', '')
+    data.passwordResetTokens ||= []
+    data.passwordResetTokens.push({ tokenHash: createHash('sha256').update(rawToken).digest('hex'), userId: user.id, expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() })
+    writeData(data)
+    if (process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
+      fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.MAIL_FROM, to: [user.email], subject: 'Đặt lại mật khẩu ExamAI', html: `<p>Xin chào ${user.name},</p><p>Nhấn vào liên kết sau để đặt lại mật khẩu:</p><p><a href="${appUrl}/?resetToken=${rawToken}">${appUrl}/?resetToken=${rawToken}</a></p><p>Liên kết có hiệu lực trong 15 phút.</p>` }) }).catch((error) => console.error('Reset email error:', error))
+    } else if (process.env.NODE_ENV !== 'production') response.resetToken = rawToken
+  }
+  res.json({ data: response })
+})
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, password } = req.body
+  if (!token || !password || password.length < 8) return res.status(400).json({ error: 'Token và mật khẩu mới tối thiểu 8 ký tự là bắt buộc.' })
+  const data = readData()
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  const reset = (data.passwordResetTokens || []).find((item) => item.tokenHash === tokenHash && new Date(item.expiresAt) > new Date())
+  if (!reset) return res.status(400).json({ error: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.' })
+  const user = data.users.find((item) => item.id === reset.userId)
+  user.passwordHash = await bcrypt.hash(password, 12)
+  data.passwordResetTokens = data.passwordResetTokens.filter((item) => item !== reset)
+  writeData(data)
+  res.json({ data: { message: 'Mật khẩu đã được thay đổi.' } })
 })
 
 app.post('/api/auth/google', async (req, res) => {
@@ -125,7 +169,8 @@ app.post('/api/auth/google', async (req, res) => {
     data.users ||= []
     let user = data.users.find((item) => item.googleSub === profile.sub || item.email.toLowerCase() === profile.email.toLowerCase())
     if (!user) {
-      user = { id: `student-${randomUUID()}`, email: profile.email.toLowerCase(), name: profile.name || profile.email.split('@')[0], role: 'student', googleSub: profile.sub, avatarUrl: profile.picture || '', createdAt: new Date().toISOString() }
+      const baseUsername = normalizeUsername(profile.email.split('@')[0]).replace(/[^a-z0-9._-]/g, '').slice(0, 24) || `student${Date.now()}`
+      user = { id: `student-${randomUUID()}`, username: `${baseUsername}-${randomUUID().slice(0, 4)}`, email: profile.email.toLowerCase(), name: profile.name || profile.email.split('@')[0], phone: '', studentCode: '', role: 'student', googleSub: profile.sub, avatarUrl: profile.picture || '', createdAt: new Date().toISOString() }
       data.users.push(user)
     } else if (!user.googleSub) {
       user.googleSub = profile.sub
@@ -143,8 +188,30 @@ app.post('/api/auth/google', async (req, res) => {
 app.get('/api/auth/me', authenticate, (req, res) => {
   const user = readData().users.find((item) => item.id === req.user.sub)
   if (!user) return res.status(401).json({ error: 'Tài khoản không tồn tại.' })
-  const { passwordHash, ...publicUser } = user
-  res.json({ data: publicUser })
+  res.json({ data: publicUser(user) })
+})
+
+app.patch('/api/auth/profile', authenticate, (req, res) => {
+  const data = readData()
+  const user = data.users.find((item) => item.id === req.user.sub)
+  if (!user) return res.status(404).json({ error: 'Tài khoản không tồn tại.' })
+  const { name, phone, studentCode } = req.body
+  if (name?.trim()) user.name = name.trim()
+  if (phone !== undefined) user.phone = String(phone).trim()
+  if (studentCode !== undefined) user.studentCode = String(studentCode).trim()
+  writeData(data)
+  res.json({ data: publicUser(user) })
+})
+
+app.patch('/api/auth/password', authenticate, async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự.' })
+  const data = readData()
+  const user = data.users.find((item) => item.id === req.user.sub)
+  if (!user || !(await bcrypt.compare(currentPassword || '', user.passwordHash || ''))) return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng.' })
+  user.passwordHash = await bcrypt.hash(newPassword, 12)
+  writeData(data)
+  res.json({ data: { message: 'Mật khẩu đã được thay đổi.' } })
 })
 
 app.get('/api/admin/users', authenticate, allowRoles('admin'), (_req, res) => {
